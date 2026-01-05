@@ -236,6 +236,7 @@ function groq_chat_inject_widget() {
         #gw-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; outline: none; font-size: 14px; }
         #gw-send { padding: 0 15px; background: #027DDD; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
         #gw-send:disabled { background: #ccc; cursor: not-allowed; }
+        div#groq-widget-window > div.gw-input-area > input[type="text"]#gw-input:not(.et_pb_s):not(#username):not(#name):focus { color: #000 !important; }
 
         @media (max-width: 768px) {
             #groq-widget-trigger { bottom: 80px; }
