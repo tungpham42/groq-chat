@@ -3,7 +3,7 @@
  * Plugin Name: Groq Chat
  * Plugin URI:  https://soft.io.vn/groq-chat
  * Description: An AI Chat Widget powered by Groq that answers questions based on your website's content.
- * Version:     1.0.0
+ * Version:     1.1.0
  * Author:      Tung Pham
  * License:     GPL-2.0+
  */
@@ -15,6 +15,7 @@ if (!defined('ABSPATH')) {
 // 1. REGISTER SETTINGS & ADMIN MENU
 add_action('admin_menu', 'groq_chat_add_admin_menu');
 add_action('admin_init', 'groq_chat_settings_init');
+add_action('admin_enqueue_scripts', 'groq_chat_admin_enqueue'); // Enqueue Color Picker
 
 function groq_chat_add_admin_menu() {
     add_options_page(
@@ -24,6 +25,14 @@ function groq_chat_add_admin_menu() {
         'groq-chat',
         'groq_chat_options_page'
     );
+}
+
+function groq_chat_admin_enqueue($hook_suffix) {
+    // Only load on our specific settings page
+    if ($hook_suffix === 'settings_page_groq-chat') {
+        wp_enqueue_style('wp-color-picker');
+        wp_enqueue_script('wp-color-picker');
+    }
 }
 
 function groq_chat_settings_init() {
@@ -51,6 +60,15 @@ function groq_chat_settings_init() {
         'groqChat',
         'groq_chat_section'
     );
+
+    // New Color Setting
+    add_settings_field(
+        'theme_color',
+        __('Theme Color', 'groq-chat'),
+        'groq_chat_themecolor_render',
+        'groqChat',
+        'groq_chat_section'
+    );
 }
 
 function groq_chat_apikey_render() {
@@ -70,8 +88,22 @@ function groq_chat_model_render() {
     <?php
 }
 
+function groq_chat_themecolor_render() {
+    $options = get_option('groq_chat_settings');
+    $value = isset($options['theme_color']) && !empty($options['theme_color']) ? $options['theme_color'] : '#027DDD';
+    ?>
+    <input type="text" name="groq_chat_settings[theme_color]" value="<?php echo esc_attr($value); ?>" class="groq-color-field" data-default-color="#027DDD" />
+    <script>
+        jQuery(document).ready(function($){
+            $('.groq-color-field').wpColorPicker();
+        });
+    </script>
+    <p class="description">Select the primary color for the chat widget.</p>
+    <?php
+}
+
 function groq_chat_section_callback() {
-    echo __('Configure your Groq API connection details below.', 'groq-chat');
+    echo __('Configure your Groq API connection and widget appearance below.', 'groq-chat');
 }
 
 function groq_chat_options_page() {
@@ -191,6 +223,9 @@ function groq_chat_inject_widget() {
     // Only show if API Key is configured and not in Admin dashboard
     $options = get_option('groq_chat_settings');
     if (is_admin() || empty($options['api_key'])) return; 
+
+    // Retrieve theme color, default to existing blue if not set
+    $theme_color = isset($options['theme_color']) && !empty($options['theme_color']) ? $options['theme_color'] : '#027DDD';
     ?>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/16.3.0/lib/marked.umd.min.js" integrity="sha512-V6rGY7jjOEUc7q5Ews8mMlretz1Vn2wLdMW/qgABLWunzsLfluM0FwHuGjGQ1lc8jO5vGpGIGFE+rTzB+63HdA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
@@ -198,7 +233,8 @@ function groq_chat_inject_widget() {
         /* --- Widget CSS --- */
         #groq-widget-trigger {
             position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px;
-            background-color: #027DDD; color: white; border-radius: 50%;
+            background-color: <?php echo esc_attr($theme_color); ?>; 
+            color: white; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             z-index: 999999; transition: transform 0.2s; font-size: 24px;
@@ -213,7 +249,10 @@ function groq_chat_inject_widget() {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
         
-        .gw-header { background: #027DDD; color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        .gw-header { 
+            background: <?php echo esc_attr($theme_color); ?>; 
+            color: white; padding: 15px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; 
+        }
         .gw-close { cursor: pointer; font-size: 18px; }
 
         #gw-messages { flex: 1; padding: 15px; overflow-y: auto; background: #f9f9f9; display: flex; flex-direction: column; gap: 10px; }
@@ -230,11 +269,15 @@ function groq_chat_inject_widget() {
         .gw-msg.bot pre { background: #2d2d2d; color: #f8f8f2; padding: 10px; border-radius: 6px; overflow-x: auto; margin: 10px 0; font-size: 12px; }
         .gw-msg.bot code { font-family: monospace; background: #eee; padding: 2px 4px; border-radius: 3px; color: #d63384; }
         .gw-msg.bot pre code { background: transparent; color: inherit; }
-        .gw-msg.bot a { color: #027DDD; text-decoration: underline; }
+        .gw-msg.bot a { color: <?php echo esc_attr($theme_color); ?>; text-decoration: underline; }
 
         .gw-input-area { padding: 10px; border-top: 1px solid #eee; background: white; display: flex; gap: 10px; }
         #gw-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; outline: none; font-size: 14px; }
-        #gw-send { padding: 0 15px; background: #027DDD; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        #gw-send { 
+            padding: 0 15px; 
+            background: <?php echo esc_attr($theme_color); ?>; 
+            color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; 
+        }
         #gw-send:disabled { background: #ccc; cursor: not-allowed; }
         div#groq-widget-window > div.gw-input-area > input[type="text"]#gw-input:not(.et_pb_s):not(#username):not(#name):focus { color: #000 !important; }
 
