@@ -204,7 +204,15 @@ function groq_chat_handle_request($request) {
         $title = groq_clean_utf8($post->post_title);
         $link = get_permalink($post->ID);
         
-        $raw_content = wp_strip_all_tags($post->post_content);
+        $raw_content = $post->post_content;
+
+        // If you are using Divi, use the specific cleaner
+        if (strpos($raw_content, '[et_pb_') !== false) {
+            $clean_content = groq_clean_divi_content($raw_content);
+        } else {
+            $clean_content = wp_strip_all_tags($raw_content);
+        }
+        
         $clean_content = preg_replace('/\s+/', ' ', $raw_content);
         $clean_content = groq_clean_utf8($clean_content);
 
@@ -272,6 +280,18 @@ function groq_chat_handle_request($request) {
     $answer = $body['choices'][0]['message']['content'] ?? 'Xin lỗi, không thể kết nối tới AI lúc này.';
 
     return rest_ensure_response(['answer' => $answer]);
+}
+
+function groq_clean_divi_content($content) {
+    // 1. Remove the opening and closing shortcode tags, but keep the content inside
+    // This regex looks for [et_pb_...] and [/et_pb_...] and removes them
+    $content = preg_replace('/\[\/?et_pb_[^\]]+\]/', '', $content);
+    
+    // 2. Run standard cleanup
+    $content = wp_strip_all_tags($content);
+    $content = preg_replace('/\s+/', ' ', $content); // Normalize whitespace
+    
+    return $content;
 }
 
 // 3. FRONTEND WIDGET
