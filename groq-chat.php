@@ -147,11 +147,10 @@ function groq_chat_handle_request($request) {
     }
 
     // --- CONTEXT BUILDING START ---
-    // Fetch top 120 most recent posts/pages
     $args = [
         'post_type'      => ['post', 'page'],
         'post_status'    => 'publish',
-        'posts_per_page' => 120, 
+        'posts_per_page' => -1, 
         'orderby'        => 'date',
         'order'          => 'DESC',
     ];
