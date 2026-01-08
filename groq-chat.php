@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
 // 1. REGISTER SETTINGS & ADMIN MENU
 add_action('admin_menu', 'groq_chat_add_admin_menu');
 add_action('admin_init', 'groq_chat_settings_init');
-add_action('admin_enqueue_scripts', 'groq_chat_admin_enqueue'); // Enqueue Color Picker
+add_action('admin_enqueue_scripts', 'groq_chat_admin_enqueue');
 
 function groq_chat_add_admin_menu() {
     add_options_page(
@@ -28,7 +28,6 @@ function groq_chat_add_admin_menu() {
 }
 
 function groq_chat_admin_enqueue($hook_suffix) {
-    // Only load on our specific settings page
     if ($hook_suffix === 'settings_page_groq-chat') {
         wp_enqueue_style('wp-color-picker');
         wp_enqueue_script('wp-color-picker');
@@ -45,30 +44,12 @@ function groq_chat_settings_init() {
         'groqChat'
     );
 
-    add_settings_field(
-        'api_key',
-        __('Groq API Key', 'groq-chat'),
-        'groq_chat_apikey_render',
-        'groqChat',
-        'groq_chat_section'
-    );
-
-    add_settings_field(
-        'model',
-        __('AI Model', 'groq-chat'),
-        'groq_chat_model_render',
-        'groqChat',
-        'groq_chat_section'
-    );
-
-    // New Color Setting
-    add_settings_field(
-        'theme_color',
-        __('Theme Color', 'groq-chat'),
-        'groq_chat_themecolor_render',
-        'groqChat',
-        'groq_chat_section'
-    );
+    add_settings_field('api_key', __('Groq API Key', 'groq-chat'), 'groq_chat_apikey_render', 'groqChat', 'groq_chat_section');
+    add_settings_field('model', __('AI Model', 'groq-chat'), 'groq_chat_model_render', 'groqChat', 'groq_chat_section');
+    add_settings_field('max_tokens', __('Max Tokens', 'groq-chat'), 'groq_chat_maxtokens_render', 'groqChat', 'groq_chat_section');
+    // NEW: Temperature Setting
+    add_settings_field('temperature', __('Temperature (Creativity)', 'groq-chat'), 'groq_chat_temperature_render', 'groqChat', 'groq_chat_section');
+    add_settings_field('theme_color', __('Theme Color', 'groq-chat'), 'groq_chat_themecolor_render', 'groqChat', 'groq_chat_section');
 }
 
 function groq_chat_apikey_render() {
@@ -81,10 +62,35 @@ function groq_chat_apikey_render() {
 
 function groq_chat_model_render() {
     $options = get_option('groq_chat_settings');
-    $value = isset($options['model']) ? $options['model'] : 'openai/gpt-oss-120b';
+    $value = isset($options['model']) ? $options['model'] : 'llama-3.3-70b-versatile';
     ?>
     <input type='text' name='groq_chat_settings[model]' value='<?php echo esc_attr($value); ?>' style="width: 400px;">
     <p class="description">Recommended: <code>openai/gpt-oss-120b</code>, <code>openai/gpt-oss-20b</code>, or <code>llama-3.3-70b-versatile</code>.</p>
+    <?php
+}
+
+function groq_chat_maxtokens_render() {
+    $options = get_option('groq_chat_settings');
+    $value = isset($options['max_tokens']) && is_numeric($options['max_tokens']) ? intval($options['max_tokens']) : 2048;
+    ?>
+    <input type='number' name='groq_chat_settings[max_tokens]' value='<?php echo esc_attr($value); ?>' style="width: 100px;" min="256" step="128">
+    <p class="description">Max tokens for response. Default: 2048.</p>
+    <?php
+}
+
+// NEW: Temperature Render Function
+function groq_chat_temperature_render() {
+    $options = get_option('groq_chat_settings');
+    $value = isset($options['temperature']) ? floatval($options['temperature']) : 0.5;
+    ?>
+    <select name='groq_chat_settings[temperature]'>
+        <option value="0.1" <?php selected($value, 0.1); ?>>0.1 - Very Precise (Strict)</option>
+        <option value="0.3" <?php selected($value, 0.3); ?>>0.3 - Precise (Good for Facts)</option>
+        <option value="0.5" <?php selected($value, 0.5); ?>>0.5 - Balanced (Default)</option>
+        <option value="0.7" <?php selected($value, 0.7); ?>>0.7 - Creative</option>
+        <option value="0.9" <?php selected($value, 0.9); ?>>0.9 - Very Creative</option>
+    </select>
+    <p class="description">Lower values are more factual/deterministic. Higher values are more creative/random.</p>
     <?php
 }
 
@@ -94,16 +100,13 @@ function groq_chat_themecolor_render() {
     ?>
     <input type="text" name="groq_chat_settings[theme_color]" value="<?php echo esc_attr($value); ?>" class="groq-color-field" data-default-color="#027DDD" />
     <script>
-        jQuery(document).ready(function($){
-            $('.groq-color-field').wpColorPicker();
-        });
+        jQuery(document).ready(function($){ $('.groq-color-field').wpColorPicker(); });
     </script>
-    <p class="description">Select the primary color for the chat widget.</p>
     <?php
 }
 
 function groq_chat_section_callback() {
-    echo __('Configure your Groq API connection and widget appearance below.', 'groq-chat');
+    echo __('Configure your Groq API connection and widget appearance.', 'groq-chat');
 }
 
 function groq_chat_options_page() {
@@ -130,13 +133,39 @@ add_action('rest_api_init', function () {
     ]);
 });
 
+/**
+ * FIXED: Aggressive UTF-8 Cleaning Function
+ */
+function groq_clean_utf8($content) {
+    if (!is_string($content)) return '';
+
+    if (function_exists('iconv')) {
+        $converted = @iconv('UTF-8', 'UTF-8//IGNORE', $content);
+        if ($converted !== false) {
+            $content = $converted;
+        }
+    }
+
+    if (function_exists('mb_convert_encoding')) {
+        $content = mb_convert_encoding($content, 'UTF-8', 'UTF-8');
+    }
+
+    $content = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $content);
+    
+    return $content;
+}
+
 function groq_chat_handle_request($request) {
     $options = get_option('groq_chat_settings');
-    $api_key = isset($options['api_key']) ? $options['api_key'] : '';
-    $model   = isset($options['model']) && !empty($options['model']) ? $options['model'] : 'openai/gpt-oss-120b';
+    $api_key = isset($options['api_key']) ? trim($options['api_key']) : '';
+    $model   = isset($options['model']) && !empty($options['model']) ? trim($options['model']) : 'llama-3.3-70b-versatile';
+    $max_tokens = isset($options['max_tokens']) ? intval($options['max_tokens']) : 2048;
+    
+    // NEW: Get Temperature setting
+    $temperature = isset($options['temperature']) ? floatval($options['temperature']) : 0.5;
 
     if (empty($api_key)) {
-        return new WP_Error('missing_config', 'API Key chưa được cấu hình trong admin.', ['status' => 500]);
+        return new WP_Error('missing_config', 'API Key chưa được cấu hình.', ['status' => 500]);
     }
 
     $params = $request->get_json_params();
@@ -146,63 +175,88 @@ function groq_chat_handle_request($request) {
         return new WP_Error('missing_params', 'Vui lòng nhập câu hỏi', ['status' => 400]);
     }
 
-    // --- CONTEXT BUILDING START ---
+    // --- CONTEXT SEARCH ---
     $args = [
-        'post_type'      => ['post', 'page'],
+        'post_type'      => ['post', 'page'], 
         'post_status'    => 'publish',
-        'posts_per_page' => -1, 
-        'orderby'        => 'date',
-        'order'          => 'DESC',
+        'posts_per_page' => 5, 
+        's'              => $question, 
+        'orderby'        => 'relevance',
     ];
 
-    $all_content = get_posts($args);
-    $context = "";
-    $max_context_length = 25000; // Characters limit
+    $query = new WP_Query($args);
+    $posts = $query->posts;
 
-    foreach ($all_content as $post) {
-        $title = $post->post_title;
+    if (empty($posts)) {
+        $fallback_args = [
+            'post_type'      => ['post', 'page'],
+            'post_status'    => 'publish',
+            'posts_per_page' => 3,
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+        ];
+        $posts = get_posts($fallback_args);
+    }
+
+    $context = "";
+    
+    foreach ($posts as $post) {
+        $title = groq_clean_utf8($post->post_title);
         $link = get_permalink($post->ID);
+        
         $raw_content = wp_strip_all_tags($post->post_content);
         $clean_content = preg_replace('/\s+/', ' ', $raw_content);
-        
-        $entry = "Tiêu đề: $title\nLink: $link\nNội dung: $clean_content\n---\n";
+        $clean_content = groq_clean_utf8($clean_content);
 
-        if (strlen($context) + strlen($entry) > $max_context_length) {
-            break; 
+        if (mb_strlen($clean_content) > 2000) {
+            $clean_content = mb_substr($clean_content, 0, 2000) . "...";
         }
+
+        $entry = "--- BÀI VIẾT ---\n";
+        $entry .= "Tiêu đề: $title\n";
+        $entry .= "Link: $link\n";
+        $entry .= "Nội dung: $clean_content\n\n";
+
         $context .= $entry;
     }
-    // --- CONTEXT BUILDING END ---
+    
+    if (empty($context)) {
+        $context = "Không tìm thấy bài viết nào trên website.";
+    }
+
+    $system_prompt = "Bạn là trợ lý AI hữu ích. \n" .
+                     "Trả lời dựa trên 'Context Data' bên dưới. \n" .
+                     "Nếu không có thông tin, hãy nói bạn không biết.\n" .
+                     "Kèm link bài viết khi trích dẫn.\n" .
+                     "Trả lời bằng Tiếng Việt.\n\n" .
+                     "Context Data:\n" . $context;
 
     $payload = [
         'model' => $model,
         'messages' => [
-            [
-                'role' => 'system',
-                'content' => "Bạn là trợ lý AI của website này. " .
-                             "Dưới đây là nội dung các bài viết trên website.\n" .
-                             "Trả lời câu hỏi dựa trên thông tin này.\n" .
-                             "Trả lời bằng Tiếng Việt.\n" .
-                             "Nếu tìm thấy thông tin, hãy cung cấp đường Link bài viết.\n" .
-                             "Dùng Markdown để định dạng.\n\n" .
-                             "Context Data:\n" . $context
-            ],
-            [
-                'role' => 'user',
-                'content' => $question
-            ]
+            ['role' => 'system', 'content' => $system_prompt],
+            ['role' => 'user', 'content' => groq_clean_utf8($question)]
         ],
-        'temperature' => 0.8,
-        'max_tokens' => 4096,
+        'temperature' => $temperature, // NEW: Use the setting value
+        'max_tokens' => $max_tokens,
     ];
+
+    $encode_flags = defined('JSON_INVALID_UTF8_IGNORE') ? JSON_INVALID_UTF8_IGNORE : 0;
+    
+    $json_body = json_encode($payload, $encode_flags);
+
+    if ($json_body === false) {
+        $json_error = json_last_error_msg();
+        return new WP_Error('json_fatal', "Lỗi nghiêm trọng: Dữ liệu bài viết chứa ký tự hỏng ($json_error).", ['status' => 500]);
+    }
 
     $response = wp_remote_post('https://api.groq.com/openai/v1/chat/completions', [
         'headers' => [
             'Authorization' => 'Bearer ' . $api_key,
             'Content-Type'  => 'application/json',
         ],
-        'body' => json_encode($payload),
-        'timeout' => 30
+        'body' => $json_body,
+        'timeout' => 45
     ]);
 
     if (is_wp_error($response)) {
@@ -210,6 +264,11 @@ function groq_chat_handle_request($request) {
     }
 
     $body = json_decode(wp_remote_retrieve_body($response), true);
+    
+    if (isset($body['error'])) {
+        return new WP_Error('groq_error', $body['error']['message'], ['status' => 500]);
+    }
+
     $answer = $body['choices'][0]['message']['content'] ?? 'Xin lỗi, không thể kết nối tới AI lúc này.';
 
     return rest_ensure_response(['answer' => $answer]);
