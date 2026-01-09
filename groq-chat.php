@@ -320,7 +320,7 @@ function groq_chat_inject_widget() {
         #groq-widget-trigger:hover { transform: scale(1.05); }
 
         #groq-widget-window {
-            position: fixed; bottom: 90px; right: 20px; width: 350px; height: 400px;
+            position: fixed; bottom: 90px; right: 20px; width: 350px; height: 400px; max-height: 80vh;
             background: white; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.2);
             display: none; flex-direction: column; z-index: 9999; overflow: hidden;
             border: 1px solid #e0e0e0;
